@@ -1,0 +1,299 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WHO Semantic Table Annotator &amp; Symptom Extraction Suite</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <!-- Top WHO Institutional Header -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-logo" aria-hidden="true">
+        <svg viewBox="0 0 36 36" width="30" height="30" fill="none">
+          <circle cx="18" cy="18" r="16" stroke="#ffffff" stroke-width="2.2"/>
+          <path d="M18 4v28M4 18h28M7.5 9.5c6 3.5 15 3.5 21 0M7.5 26.5c6-3.5 15-3.5 21 0" stroke="#ffffff" stroke-width="1.5" opacity="0.85"/>
+          <path d="M18 8v20M14.5 12c2-1.5 5-1.5 7 0s0 4-3.5 5.5-5.5 3.5-3.5 5.5 5 1.5 7 0" stroke="#fbbf24" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-title">WHO Epidemiological Column Type Annotator</div>
+        <div class="brand-subtitle">Hybrid RECA Ensemble &bull; Random Forest Hardware Substitute &bull; Multilingual Symptom Extraction</div>
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <div id="hw-badges" class="hw-badges"></div>
+
+      <button id="btn-undo" class="btn btn-secondary" title="Revert Last Action (Ctrl + Z)" disabled>
+        <span>&#8630; Revert</span>
+        <kbd>Ctrl+Z</kbd>
+      </button>
+      <button id="btn-redo" class="btn btn-secondary" title="Redo Action (Ctrl + Y)" disabled>
+        <span>&#8631;</span>
+      </button>
+
+      <div class="export-group">
+        <select id="export-format" class="select-sm" title="Choose header format for exported CSV">
+          <option value="renamed">Export: Active Headers</option>
+          <option value="combined">Export: Original (Annotated)</option>
+        </select>
+        <button id="btn-export" class="btn btn-primary" disabled>
+          &#128190; Export CSV
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Control Panel Bar -->
+  <section class="control-bar">
+    <div class="control-group file-controls">
+      <label for="file-upload" class="btn btn-outline file-upload-label">
+        &#128194; Upload CSV File
+        <input type="file" id="file-upload" accept=".csv" hidden />
+      </label>
+
+      <div class="sample-picker">
+        <select id="sample-select" class="select-control">
+          <option value="">Or load bundled WHO sample...</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="control-group routing-controls">
+      <div class="field-item">
+        <label for="mode-select">Annotation Engine &amp; Preset</label>
+        <select id="mode-select" class="select-control">
+          <option value="reca_pareto">RECA + Hybrid Routing (Pareto Optimal: Thresh=0.50, Tol=2)</option>
+          <option value="reca_max_f1">RECA + Hybrid Routing (Max Macro F1: Thresh=0.50, Tol=1)</option>
+          <option value="rf_pareto">Random Forest + Hybrid (Hardware Substitute Pareto: Thresh=0.30, Tol=2)</option>
+          <option value="rf_max_f1">Random Forest + Hybrid (Hardware Substitute Max F1: Thresh=0.55, Tol=1)</option>
+          <option value="pure_reca">Pure RECA Ensemble (100% Local Deep Learning)</option>
+          <option value="pure_rf">Pure Random Forest Classifier (100% Local Fast CPU Substitute)</option>
+        </select>
+      </div>
+
+      <div class="field-item param-mini">
+        <label for="input-thresh" title="Confidence threshold below which columns escalate to LLM in Hybrid mode">Conf &theta;<sub>conf</sub></label>
+        <input type="number" id="input-thresh" step="0.05" min="0.0" max="1.0" value="0.50" class="input-sm" />
+      </div>
+
+      <div class="field-item param-mini">
+        <label for="input-tol" title="Allowed distinct predictions across the 5 ensemble members before escalating">Tol &tau;<sub>ens</sub> (1-5)</label>
+        <input type="number" id="input-tol" step="1" min="1" max="5" value="2" class="input-sm" />
+      </div>
+
+      <button id="btn-advanced-toggle" class="btn btn-ghost btn-sm" title="Configure Weak Domain Classes, Soft Penalty, or Gemini API Key">
+        &#9881; Routing Options
+      </button>
+
+      <button id="btn-run-annotate" class="btn btn-accent" disabled>
+        &#9889; Run Annotation
+      </button>
+    </div>
+  </section>
+
+  <!-- Collapsible Advanced Routing Drawer -->
+  <section id="advanced-drawer" class="advanced-drawer hidden">
+    <div class="advanced-inner">
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-weak-classes" checked />
+        <span>Escalate 23 Rare/Hard Epidemiological Classes (<code>Pathogen</code>, <code>Travel_history</code>, <code>Date_onset</code>, etc.)</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-soft-penalty" checked />
+        <span>Table-Level Context Soft-Penalty Heuristic (<code>default=0.05</code>, <code>Date_*=0.10</code>)</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-auto-accept" />
+        <span>Automatically overwrite headers with top predictions upon annotation</span>
+      </label>
+      <div class="api-key-box">
+        <label for="input-api-key">Optional Gemini API Key (for live LLM escalation):</label>
+        <input type="password" id="input-api-key" placeholder="Uses GOOGLE_API_KEY env or local fallback if blank" class="input-text-sm" />
+      </div>
+    </div>
+    <div id="preset-description" class="preset-description"></div>
+  </section>
+
+  <!-- Alert / Notification Banners -->
+  <div id="banners-container" class="banners-container">
+    <!-- Hardware Fallback Notice -->
+    <div id="fallback-banner" class="banner banner-info hidden">
+      <div class="banner-content">
+        <strong>&#8505; Hardware Adaptation Active:</strong>
+        <span id="fallback-text"></span>
+      </div>
+      <button class="banner-close" onclick="document.getElementById('fallback-banner').classList.add('hidden')">&times;</button>
+    </div>
+
+    <!-- Automatic Symptoms Column Prompt Banner -->
+    <div id="symptoms-prompt-banner" class="banner banner-symptom hidden">
+      <div class="banner-content">
+        <span class="symptom-badge">&#128138; Symptoms Column Detected</span>
+        <span id="symptoms-prompt-text">
+          A <strong>Symptoms</strong> column was identified in this dataset. Would you like to run the Multilingual NER + Fuzzy Clustering Symptom Extraction Pipeline to generate normalized boolean symptom columns?
+        </span>
+      </div>
+      <div class="banner-actions">
+        <button id="btn-open-symptom-modal" class="btn btn-symptom">
+          &#10024; Preview &amp; Extract Symptom Columns
+        </button>
+        <button id="btn-Quick-add-symptom" class="btn btn-outline-dark btn-sm">
+          + Add Custom Symptom Column
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Workspace -->
+  <main class="workspace">
+    <!-- Summary & Bulk Override Toolbar (visible when table is loaded) -->
+    <div id="table-toolbar" class="table-toolbar hidden">
+      <div class="table-stats">
+        <span id="stat-filename" class="stat-pill stat-file"></span>
+        <span id="stat-dims" class="stat-pill"></span>
+        <span id="stat-routing" class="stat-pill stat-routing hidden"></span>
+      </div>
+
+      <div class="bulk-actions">
+        <span class="hint-text">Click any prediction badge or dropdown to override &bull; Right-click badge to reset to original</span>
+        <button id="btn-add-symptom-toolbar" class="btn btn-secondary btn-sm">
+          &#128138; + Add Symptom Column
+        </button>
+        <button id="btn-accept-all" class="btn btn-success-outline btn-sm">
+          &#10003; Accept All Predictions
+        </button>
+        <button id="btn-reset-all" class="btn btn-secondary btn-sm">
+          &#8634; Reset All to Original
+        </button>
+      </div>
+    </div>
+
+    <!-- Empty State Dropzone -->
+    <div id="empty-state" class="empty-state">
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone-icon">&#128202;</div>
+        <h2>Upload an Epidemiological CSV Table to Begin</h2>
+        <p>Drag &amp; drop a <code>.csv</code> file here, click <strong>Upload CSV File</strong> above, or select one of the bundled WHO outbreak datasets.</p>
+        <div class="feature-cards">
+          <div class="f-card">
+            <h4>1. Hybrid Routing &amp; Hardware Substitute</h4>
+            <p>Annotates columns using the 5-member <strong>RECA Ensemble</strong> with optimal hybrid routing (<code>&theta;<sub>conf</sub>=0.50, &tau;<sub>ens</sub>=2</code>) or automatically substitutes the 10,004-dim <strong>Pruned Random Forest</strong> (<code>&theta;<sub>conf</sub>=0.30, &tau;<sub>ens</sub>=2</code>) on CPU-only hardware.</p>
+          </div>
+          <div class="f-card">
+            <h4>2. Effortless Prediction Overrides &amp; Ctrl+Z</h4>
+            <p>One-click accept/decline badges, searchable dropdowns over all 73 WHO semantic classes, top-3 confidence alternatives, inline header editing, and instant <strong>Ctrl + Z</strong> undo history.</p>
+          </div>
+          <div class="f-card">
+            <h4>3. Automated Symptom Extraction Pipeline</h4>
+            <p>Automatically prompts when a <code>Symptoms</code> column is detected, previews all extracted <code>symptom: &lt;name&gt;</code> boolean columns, and lets you remove or add custom symptom columns with one click.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interactive Data Grid Container -->
+    <div id="grid-wrapper" class="grid-wrapper hidden">
+      <table id="data-grid" class="data-grid">
+        <thead id="grid-thead"></thead>
+        <tbody id="grid-tbody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- Modal 1: Symptom Extraction Pipeline Interactive Preview & Editor -->
+  <div id="symptom-modal" class="modal-backdrop hidden">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <div>
+          <h3>&#128138; Symptom Extraction Pipeline — Generated Columns Preview</h3>
+          <p id="symptom-modal-subtitle" class="modal-subtitle">
+            Review the boolean symptom columns extracted via Coded-Data Bypass, M2M100 Translation, BIOES Medical NER, SpaCy Lemmatization, and Fuzzy Clustering (&gt;85%).
+          </p>
+        </div>
+        <button id="btn-close-symptom-modal" class="modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="symptom-controls-bar">
+          <div class="symptom-bulk-select">
+            <button id="btn-sym-select-all" class="btn btn-secondary btn-sm">Select All</button>
+            <button id="btn-sym-deselect-all" class="btn btn-secondary btn-sm">Deselect All</button>
+            <span id="symptom-count-summary" class="symptom-count-summary"></span>
+          </div>
+
+          <div class="symptom-add-inline">
+            <input type="text" id="input-new-symptom-modal" placeholder="Add custom symptom (e.g. headache, rash)..." class="input-text-sm" />
+            <button id="btn-add-symptom-modal" class="btn btn-outline btn-sm">+ Add Symptom Column</button>
+          </div>
+        </div>
+
+        <div id="symptom-chips-container" class="symptom-chips-container"></div>
+
+        <div class="symptom-modal-options">
+          <label class="checkbox-label">
+            <input type="checkbox" id="chk-drop-orig-symptoms" checked />
+            <span>Replace original <code>Symptoms</code> column with the selected boolean symptom columns</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btn-cancel-symptom-modal" class="btn btn-secondary">Cancel</button>
+        <button id="btn-apply-symptom-modal" class="btn btn-primary">
+          &#10003; Apply Selected Symptom Columns
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Quick Add Custom Symptom Column -->
+  <div id="add-col-modal" class="modal-backdrop hidden">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header">
+        <h3>+ Add Symptom Column</h3>
+        <button id="btn-close-add-col-modal" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-field">
+          <label for="input-quick-symptom-name">Symptom Name (automatically prefixed with <code>symptom: </code>):</label>
+          <input type="text" id="input-quick-symptom-name" placeholder="e.g., fever, cough, dehydration" class="input-full" />
+        </div>
+        <div class="form-field">
+          <label for="select-quick-symptom-source">Populate values by scanning existing column (optional):</label>
+          <select id="select-quick-symptom-source" class="select-control">
+            <option value="">Initialize all rows as False (or True below)</option>
+          </select>
+        </div>
+        <label class="checkbox-label">
+          <input type="checkbox" id="chk-quick-symptom-default" />
+          <span>If not scanning a column, initialize all rows to <code>True</code> instead of <code>False</code></span>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-cancel-add-col" class="btn btn-secondary">Cancel</button>
+        <button id="btn-confirm-add-col" class="btn btn-primary">Add Column</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay hidden">
+    <div class="spinner-card">
+      <div class="spinner"></div>
+      <div id="loading-title" class="loading-title">Running Hybrid Ensemble Inference...</div>
+      <div id="loading-subtitle" class="loading-subtitle">Evaluating column representations and table-level context</div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- Datalist of all 73 WHO Semantic Classes for instant search/autocomplete -->
+  <datalist id="who-semantic-classes"></datalist>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

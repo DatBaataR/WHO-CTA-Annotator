@@ -1,0 +1,17 @@
+﻿__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv/
+venv/
+env/
+build/
+dist/
+*.spec
+
+# Keep repository lightweight: ignore large NLP / BERT weights (>400 MB each)
+# (Lightweight RF checkpoints in checkpoints_rf/*.pkl and WHO-CTA-Annotator.exe ARE tracked!)
+checkpoints_reca/*.pkl
+checkpoints_reca/*.pt
+checkpoints_reca/*.bin
+models/
