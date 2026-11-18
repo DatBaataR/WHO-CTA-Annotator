@@ -1,0 +1,7 @@
+﻿table_id,column_index,label,data
+who_outbreak_1,0,ID,Patient_ID : WHO-2026-001 WHO-2026-002 WHO-2026-003 WHO-2026-004 WHO-2026-005
+who_outbreak_1,1,Age,Patient_Age : 34 12 67 45 29 51 8 42
+who_outbreak_1,2,Gender,Sex : Female Male Female Male Male Female
+who_outbreak_1,3,Date_onset,Onset_Date : 2026-03-01 2026-03-02 2026-03-04 2026-03-05 2026-03-07
+who_outbreak_1,4,Symptoms,Clinical_Notes : watery diarrhea and vomiting; severe dehydration; fever and headache
+who_outbreak_1,5,Outcome,Vital_Status : Alive Alive Dead Alive Recovered

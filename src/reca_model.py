@@ -75,9 +75,21 @@ def find_reca_checkpoint_files(base_dir=None, data_fold=0):
     candidate_dirs.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "checkpoints_reca")))
     candidate_dirs.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "RECA-paper", "Semtab", "checkpoints_new_labels")))
 
-    for ckpt_dir in candidate_dirs:
-        if not os.path.isdir(ckpt_dir):
-            continue
+    # Expand candidate_dirs to also include any 1-level subdirectories inside checkpoints_reca/
+    # (in case the user extracts a Google Drive .zip that creates a subfolder)
+    expanded_dirs = []
+    for d in candidate_dirs:
+        if os.path.isdir(d):
+            expanded_dirs.append(d)
+            try:
+                for entry in os.listdir(d):
+                    sub = os.path.join(d, entry)
+                    if os.path.isdir(sub):
+                        expanded_dirs.append(sub)
+            except Exception:
+                pass
+
+    for ckpt_dir in expanded_dirs:
         # Look for the 5 ensemble members of the target fold first (matches 5-member tolerance 1..5)
         fold_files = []
         for orig_fold in range(1, 6):
@@ -206,3 +218,4 @@ class RECAEnsemblePredictor:
                 "num_different_answers": num_diff,
             })
         return results
+

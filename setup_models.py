@@ -2,7 +2,7 @@
 setup_models.py — Model & Checkpoint Setup Utility for WHO-CTA-Annotator.
 
 Because GitHub repositories have file size limits, the repository comes bundled with
-the lightweight 5-fold Pruned Random Forest checkpoints (~14 MB total) so the project
+the lightweight 5-fold Pruned Random Forest checkpoints (~14.3 MB total) so the project
 runs out-of-the-box on any CPU hardware.
 
 Run this script to download / install the deep learning models for full RECA Ensemble
@@ -11,16 +11,20 @@ and Multilingual Medical NER Symptom Extraction:
   2. HUMADEX/english_medical_ner -> `./models/english_medical_ner`
   3. facebook/m2m100_418M -> `./models/m2m100_418M`
   4. bert-base-multilingual-uncased (cached for RECA KREL backbone)
-  5. RECA 5-fold fine-tuned checkpoints -> `./checkpoints_reca/`
+  5. RECA 5-member fine-tuned checkpoints -> `./checkpoints_reca/` (from Google Drive or local folder)
 """
 
 import os
 import sys
+import zipfile
 import shutil
 import argparse
 import subprocess
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Paste your shared Google Drive folder or zip link here before pushing to GitHub if desired:
+GOOGLE_DRIVE_RECA_URL = ""
 
 
 def download_spacy_model():
@@ -80,54 +84,90 @@ def download_hf_models(skip_translator=False):
     print("  -> Cached bert-base-multilingual-uncased.")
 
 
-def setup_reca_checkpoints(source_dir=None):
+def extract_any_zips_in_dir(target_dir):
+    """Automatically extracts any .zip files placed inside checkpoints_reca/."""
+    for fname in os.listdir(target_dir):
+        if fname.lower().endswith(".zip"):
+            zpath = os.path.join(target_dir, fname)
+            print(f"  -> Extracting archive {fname} in {target_dir}...")
+            with zipfile.ZipFile(zpath, "r") as zf:
+                zf.extractall(target_dir)
+
+
+def download_reca_from_gdrive(gdrive_url, reca_dir):
+    """Downloads RECA checkpoints from a Google Drive folder or file link using gdown."""
+    try:
+        import gdown
+    except ImportError:
+        print("  -> Installing 'gdown' to download from Google Drive...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "gdown"])
+        import gdown
+
+    print(f"\nDownloading RECA checkpoints from Google Drive into {reca_dir}...")
+    if "/folders/" in gdrive_url or "usp=drive_link" in gdrive_url and "/file/" not in gdrive_url:
+        gdown.download_folder(url=gdrive_url, output=reca_dir, quiet=False, use_cookies=False)
+    else:
+        gdown.download(url=gdrive_url, output=reca_dir + os.sep, quiet=False, fuzzy=True)
+
+    extract_any_zips_in_dir(reca_dir)
+
+
+def setup_reca_checkpoints(source_dir=None, gdrive_url=None):
     reca_dir = os.path.join(BASE_DIR, "checkpoints_reca")
     os.makedirs(reca_dir, exist_ok=True)
 
-    # Check if local sibling repo has the fine-tuned checkpoints
-    default_sibling = os.path.abspath(os.path.join(BASE_DIR, "..", "RECA-paper", "Semtab", "checkpoints_new_labels"))
-    src = source_dir or (default_sibling if os.path.isdir(default_sibling) else None)
+    extract_any_zips_in_dir(reca_dir)
 
-    if src and os.path.isdir(src):
-        print(f"\nCopying 5-fold RECA Ensemble checkpoints from {src} to {reca_dir}...")
+    effective_url = gdrive_url or GOOGLE_DRIVE_RECA_URL
+    if effective_url:
+        download_reca_from_gdrive(effective_url, reca_dir)
+
+    if source_dir and os.path.isdir(source_dir):
+        print(f"\nCopying 5-member RECA Ensemble checkpoints from {source_dir} to {reca_dir}...")
         copied = 0
         for orig_fold in range(1, 6):
             fname = f"semtab-RECA-finetune_dataFold_0_origFold_{orig_fold}.pkl"
-            s_path = os.path.join(src, fname)
+            s_path = os.path.join(source_dir, fname)
             d_path = os.path.join(reca_dir, fname)
             if os.path.isfile(s_path) and not os.path.isfile(d_path):
                 shutil.copy2(s_path, d_path)
                 copied += 1
         print(f"  -> {copied} RECA checkpoint(s) copied into checkpoints_reca/.")
+
+    from src.reca_model import find_reca_checkpoint_files
+    found = find_reca_checkpoint_files(BASE_DIR)
+    if found:
+        print(f"\n[RECA Ready] Found {len(found)} RECA checkpoint(s) in checkpoints_reca/:")
+        for p in found:
+            print(f"  - {os.path.basename(p)}")
     else:
-        existing = [f for f in os.listdir(reca_dir) if f.endswith(".pkl")]
-        if existing:
-            print(f"\nFound {len(existing)} RECA checkpoint(s) in {reca_dir}.")
-        else:
-            print(
-                f"\nNote: Place your fine-tuned RECA checkpoint files "
-                f"(semtab-RECA-finetune_dataFold_0_origFold_1..5.pkl) into:\n  {reca_dir}\n"
-                f"Until then, the application will automatically use the bundled Random Forest substitute."
-            )
+        print(
+            "\n" + "=" * 75 + "\n"
+            "  RECA Checkpoints (Google Drive):\n"
+            "  Download the 5 fine-tuned RECA checkpoint files from Google Drive:\n"
+            "    - semtab-RECA-finetune_dataFold_0_origFold_1.pkl\n"
+            "    - semtab-RECA-finetune_dataFold_0_origFold_2.pkl\n"
+            "    - semtab-RECA-finetune_dataFold_0_origFold_3.pkl\n"
+            "    - semtab-RECA-finetune_dataFold_0_origFold_4.pkl\n"
+            "    - semtab-RECA-finetune_dataFold_0_origFold_5.pkl\n"
+            f"  and place them inside:\n    {reca_dir}\n\n"
+            "  (Until they are placed there, the app automatically uses the bundled\n"
+            "   5-Fold Pruned Random Forest substitute in checkpoints_rf/.)\n"
+            + "=" * 75
+        )
 
 
 def main():
     parser = argparse.ArgumentParser(description="Download and configure NLP & RECA models for WHO-CTA-Annotator")
     parser.add_argument("--skip-translator", action="store_true", help="Skip downloading the 1.6GB M2M100 translation model")
-    parser.add_argument("--copy-reca-from", type=str, default=None, help="Optional path to copy RECA .pkl checkpoints from")
+    parser.add_argument("--gdrive-url", type=str, default=None, help="Google Drive link (folder or zip) to download RECA checkpoints into checkpoints_reca/")
+    parser.add_argument("--copy-reca-from", type=str, default=None, help="Optional local path to copy RECA .pkl checkpoints from")
     args = parser.parse_args()
 
     download_spacy_model()
     download_hf_models(skip_translator=args.skip_translator)
-    if args.copy_reca_from:
-        setup_reca_checkpoints(source_dir=args.copy_reca_from)
-    else:
-        print(
-            "\n[RECA Checkpoints] To keep the repository lightweight for GitHub, RECA .pkl files are not copied by default.\n"
-            "If you want to copy the 5 fold-0 RECA checkpoints locally, run:\n"
-            "  python setup_models.py --copy-reca-from ../RECA-paper/Semtab/checkpoints_new_labels"
-        )
-    print("\nSetup complete! Start the Web GUI with:\n  python app.py")
+    setup_reca_checkpoints(source_dir=args.copy_reca_from, gdrive_url=args.gdrive_url)
+    print("\nSetup complete! Start the Web GUI by double-clicking WHO-CTA-Annotator.exe or running:\n  python app.py")
 
 
 if __name__ == "__main__":

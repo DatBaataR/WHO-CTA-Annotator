@@ -1,0 +1,6 @@
+﻿Patient_ID (ID),Patient_Age (Age),Sex (Gender),Onset_Date (Date_onset),Clinical_Notes (Symptoms),Vital_Status (Outcome)
+WHO-2026-001,34,Female,2026-03-01,"watery diarrhea, vomiting",Alive
+WHO-2026-002,12,Male,2026-03-02,severe dehydration,Alive
+WHO-2026-003,67,Female,2026-03-04,"fever, headache",Dead
+WHO-2026-004,45,Male,2026-03-05,diarrhea,Alive
+WHO-2026-005,29,Female,2026-03-07,vomiting,Recovered
